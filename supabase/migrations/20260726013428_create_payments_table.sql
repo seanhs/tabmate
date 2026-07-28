@@ -1,22 +1,65 @@
-create table if not exists payments (
-  id uuid primary key default gen_random_uuid(),
-  trip_id uuid not null references trips(id) on delete cascade,
-  from_participant_id uuid not null references participants(id) on delete cascade,
-  to_participant_id uuid not null references participants(id) on delete cascade,
-  amount numeric(12,2) not null,
-  status text not null default 'pending' check (status in ('pending','confirmed')),
-  created_at timestamptz not null default now(),
+/*
+# Create payments table for settlement tracking
+
+## Summary
+Records individual settlement payments between participants so that people
+can mark a payment as "paid" and the recipient can confirm it. Confirmed
+payments adjust the balances so settled debts disappear from the list.
+
+## New Tables
+- `payments`
+  - `id` (uuid, primary key)
+  - `trip_id` (uuid, FK to trips, cascade delete)
+  - `from_participant_id` (uuid, FK to participants, cascade delete)
+  - `to_participant_id` (uuid, FK to participants, cascade delete)
+  - `amount` (numeric, not null)
+  - `status` (text, not null, default 'pending') — 'pending' or 'confirmed'
+  - `created_at` (timestamptz, default now())
+  - `confirmed_at` (timestamptz, nullable)
+
+## Security
+- RLS enabled on `payments`.
+- This is a no-auth single-tenant app, so anon+authenticated CRUD is allowed
+  (the trip link IS the access control — anyone with the link can see/edit).
+
+## Notes
+1. Only one pending payment per (from, to) pair at a time — enforced by a
+   partial unique index so duplicate "mark as paid" clicks don't create
+   duplicates.
+2. Confirmed payments are factored into balance calculations client-side.
+3. When a payment is confirmed, `confirmed_at` is set for audit.
+*/
+
+CREATE TABLE IF NOT EXISTS payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trip_id uuid NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+  from_participant_id uuid NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  to_participant_id uuid NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  amount numeric(12,2) NOT NULL,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed')),
+  created_at timestamptz NOT NULL DEFAULT now(),
   confirmed_at timestamptz
 );
 
-create index on payments (trip_id);
-create index on payments (from_participant_id);
-create index on payments (to_participant_id);
-create index on payments (status);
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 
-alter table payments enable row level security;
+DROP POLICY IF EXISTS "anon_select_payments" ON payments;
+CREATE POLICY "anon_select_payments" ON payments FOR SELECT
+  TO anon, authenticated USING (true);
 
-create policy "select_payments" on payments for select to anon, authenticated using (true);
-create policy "insert_payments" on payments for insert to anon, authenticated with check (true);
-create policy "update_payments" on payments for update to anon, authenticated using (true) with check (true);
-create policy "delete_payments" on payments for delete to anon, authenticated using (true);
+DROP POLICY IF EXISTS "anon_insert_payments" ON payments;
+CREATE POLICY "anon_insert_payments" ON payments FOR INSERT
+  TO anon, authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "anon_update_payments" ON payments;
+CREATE POLICY "anon_update_payments" ON payments FOR UPDATE
+  TO anon, authenticated USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "anon_delete_payments" ON payments;
+CREATE POLICY "anon_delete_payments" ON payments FOR DELETE
+  TO anon, authenticated USING (true);
+
+-- Prevent duplicate pending payments for the same (from, to) pair
+CREATE UNIQUE INDEX IF NOT EXISTS payments_pending_unique
+  ON payments (trip_id, from_participant_id, to_participant_id)
+  WHERE status = 'pending';
