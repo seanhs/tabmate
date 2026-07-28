@@ -1,11 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 import {
   Receipt, Plus, ArrowLeft, Share2, Check, Loader2,
   Users, TrendingUp, TrendingDown, CheckCircle2, Trash2, X, Wallet, Pencil, CreditCard,
-  Clock, BadgeCheck, Camera, ScanLine, Mic,
+  Camera, ScanLine, Mic, Calendar, Paperclip,
+  Mail,
 } from 'lucide-react'
 import ShareSheet from '../components/ShareSheet'
+import { ParticipantAvatar } from '../components/ParticipantAvatar'
+import { BankLogo } from '../components/BankLogo'
 import Footer from '../components/Footer'
 import { supabase, type Trip, type Participant, type Expense, type Payment } from '../lib/supabase'
 import { parseNames } from '../lib/utils'
@@ -15,7 +19,7 @@ import {
   type Settlement,
 } from '../lib/debts'
 import {
-  COUNTRIES, providersForCountry,
+  COUNTRIES, providersForCountry, CANADIAN_BANKS,
   type PaymentProvider, type CountryCode,
 } from '../lib/supabase'
 import { track } from '../lib/analytics'
@@ -47,7 +51,7 @@ export default function TripPage() {
 
       if (tripError) throw tripError
       if (!tripData) {
-        setError('Trip not found.')
+        setError('Tab not found.')
         setLoading(false)
         return
       }
@@ -88,7 +92,7 @@ export default function TripPage() {
         expense_count: eData?.length ?? 0,
       })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load trip.')
+      setError(err instanceof Error ? err.message : 'Failed to load tab.')
     } finally {
       setLoading(false)
     }
@@ -102,7 +106,7 @@ export default function TripPage() {
     const url = window.location.href
     if (navigator.share) {
       try {
-        await navigator.share({ title: trip?.name ?? 'Tabmate trip', text: `Settle up on Tabmate: ${trip?.name ?? ''}`, url })
+        await navigator.share({ title: trip?.name ?? 'Tabmate tab', text: `Settle up on Tabmate: ${trip?.name ?? ''}`, url })
         track('share_native_invoked', { trip_id: trip?.id, trip_slug: slug })
         return
       } catch {
@@ -114,9 +118,8 @@ export default function TripPage() {
 
   const participantMap = new Map(participants.map((p) => [p.id, p]))
   const confirmedPayments = payments.filter((p) => p.status === 'confirmed')
-  const pendingPayments = payments.filter((p) => p.status === 'pending')
   const balances = calculateBalances(expenses, participants, confirmedPayments)
-  const settlements = simplifyDebts(balances, pendingPayments)
+  const settlements = simplifyDebts(balances, [])
   const totalSpent = expenses.reduce((sum, e) => sum + Number(e.amount), 0)
 
   async function markAsPaid(s: Settlement) {
@@ -127,7 +130,8 @@ export default function TripPage() {
         from_participant_id: s.from,
         to_participant_id: s.to,
         amount: s.amount,
-        status: 'pending',
+        status: 'confirmed',
+        confirmed_at: new Date().toISOString(),
       })
     if (error) {
       console.error(error)
@@ -139,41 +143,6 @@ export default function TripPage() {
       from: s.from,
       to: s.to,
       amount: s.amount,
-    })
-    loadData()
-  }
-
-  async function confirmPayment(payment: Payment) {
-    const { error } = await supabase
-      .from('payments')
-      .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
-      .eq('id', payment.id)
-    if (error) {
-      console.error(error)
-      return
-    }
-    track('payment_confirmed', {
-      trip_id: trip?.id,
-      trip_slug: slug,
-      payment_id: payment.id,
-      amount: payment.amount,
-    })
-    loadData()
-  }
-
-  async function rejectPayment(payment: Payment) {
-    const { error } = await supabase
-      .from('payments')
-      .delete()
-      .eq('id', payment.id)
-    if (error) {
-      console.error(error)
-      return
-    }
-    track('payment_rejected', {
-      trip_id: trip?.id,
-      trip_slug: slug,
-      payment_id: payment.id,
     })
     loadData()
   }
@@ -212,7 +181,7 @@ export default function TripPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <div className="min-w-0">
-              <h1 className="text-lg font-bold truncate">{trip.name}</h1>
+              <EditableTripName trip={trip} onSaved={loadData} />
               <p className="text-xs text-neutral-500 flex items-center gap-1">
                 <Users className="h-3 w-3" />
                 {participants.length} people · {expenses.length} expenses
@@ -254,147 +223,32 @@ export default function TripPage() {
           </div>
         </div>
 
-        {/* Settlements */}
-        {settlements.length > 0 && (
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent">
-              <h2 className="font-semibold flex items-center gap-2">
-                <ZapIcon />
-                Smart settlements
-              </h2>
-              <div className="text-xs text-neutral-500 mt-0.5">
-                {settlements.length} payment{settlements.length === 1 ? '' : 's'} remaining
-                {pendingPayments.length > 0 && ` · ${pendingPayments.length} pending confirmation`}
-              </div>
-            </div>
-            <div className="divide-y divide-neutral-100">
-              {settlements.map((s, i) => {
-                const fromP = participantMap.get(s.from)
-                const toP = participantMap.get(s.to)
-                const note = `${fromP?.name ?? ''} → ${toP?.name ?? ''} (${trip.name})`
-                return (
-                  <div key={i} className="px-5 py-4 flex items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-600 text-sm font-semibold shrink-0">
-                        {(fromP?.name ?? '?')[0]}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          <span className="text-neutral-900">{fromP?.name}</span>
-                          <span className="text-neutral-400 mx-1.5">pays</span>
-                          <span className="text-neutral-900">{toP?.name}</span>
-                        </p>
-                        <p className="text-xs text-neutral-500">{formatCurrency(s.amount)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {(() => {
-                        const link = toP ? buildPaymentLink(toP, s.amount, note) : null
-                        if (link) {
-                          return (
-                            <a
-                              href={link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="btn-ghost text-xs"
-                              onClick={() => track('payment_link_clicked', {
-                                trip_id: trip?.id,
-                                trip_slug: slug,
-                                provider: toP?.payment_provider,
-                                amount: s.amount,
-                              })}
-                            >
-                              Pay with {providerLabel(toP?.payment_provider)}
-                            </a>
-                          )
-                        }
-                        return null
-                      })()}
-                      <button
-                        onClick={() => markAsPaid(s)}
-                        className="btn-ghost text-xs text-neutral-600 hover:bg-neutral-100"
-                        title="Mark as paid"
-                      >
-                        <Wallet className="h-3.5 w-3.5" />
-                        Mark paid
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Pending payments awaiting confirmation */}
-        {pendingPayments.length > 0 && (
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-100 bg-amber-50/50">
-              <h2 className="font-semibold flex items-center gap-2">
-                <Clock className="h-4 w-4 text-amber-600" />
-                Pending confirmation
-              </h2>
-              <p className="text-xs text-neutral-500 mt-0.5">
-                Tap confirm once you've received the money.
-              </p>
-            </div>
-            <div className="divide-y divide-neutral-100">
-              {pendingPayments.map((pay) => {
-                const fromP = participantMap.get(pay.from_participant_id)
-                const toP = participantMap.get(pay.to_participant_id)
-                return (
-                  <div key={pay.id} className="px-5 py-4 flex items-center justify-between gap-3 animate-fade-in">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-50 text-amber-600 text-sm font-semibold shrink-0">
-                        {(fromP?.name ?? '?')[0]}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          <span className="text-neutral-900">{fromP?.name}</span>
-                          <span className="text-neutral-400 mx-1.5">paid</span>
-                          <span className="text-neutral-900">{toP?.name}</span>
-                        </p>
-                        <p className="text-xs text-neutral-500">{formatCurrency(Number(pay.amount))}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => confirmPayment(pay)}
-                        className="btn-ghost text-xs text-accent-600 hover:bg-accent-50"
-                        title="Confirm received"
-                      >
-                        <BadgeCheck className="h-4 w-4" />
-                        Confirm
-                      </button>
-                      <button
-                        onClick={() => rejectPayment(pay)}
-                        className="btn-ghost text-xs text-red-500 hover:bg-red-50"
-                        title="Reject"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Balances */}
+        {/* Settle up — balances + suggested payments in one card */}
         {participants.length > 0 && (
-          <div className="card p-5">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold">Balances</h2>
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold flex items-center gap-2">
+                  <ZapIcon />
+                  Settle up
+                </h2>
+                <div className="text-xs text-neutral-500 mt-0.5">
+                  {settlements.length > 0
+                    ? `${settlements.length} payment${settlements.length === 1 ? '' : 's'} remaining`
+                    : 'Everyone is settled up'}
+                </div>
+              </div>
               <button
                 onClick={() => setShowAddPersonModal(true)}
-                className="btn-ghost text-xs text-primary-600"
+                className="btn-ghost text-xs text-primary-600 shrink-0"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add person
               </button>
             </div>
-            <div className="space-y-3">
+
+            {/* Per-person balances */}
+            <div className="px-5 py-4 space-y-3">
               {balances
                 .sort((a, b) => b.net - a.net)
                 .map((b) => {
@@ -406,14 +260,21 @@ export default function TripPage() {
                   return (
                     <div key={b.participantId} className="flex items-center justify-between group/p">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-neutral-600 text-xs font-semibold">
-                          {p.name[0]}
+                        <ParticipantAvatar id={p.id} size="sm" />
+                        <div className="min-w-0">
+                          <EditableName
+                            participant={p}
+                            existingNames={participants.filter((x) => x.id !== p.id).map((x) => x.name)}
+                            onSaved={loadData}
+                          />
+                          {p.payment_provider && (
+                            <p className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                              <CreditCard className="h-2.5 w-2.5" />
+                              {providerLabel(p.payment_provider)}
+                              {p.payment_handle && <span className="truncate">· {p.payment_handle}</span>}
+                            </p>
+                          )}
                         </div>
-                        <EditableName
-                          participant={p}
-                          existingNames={participants.filter((x) => x.id !== p.id).map((x) => x.name)}
-                          onSaved={loadData}
-                        />
                       </div>
                       <div className="flex items-center gap-1.5">
                         {settled ? (
@@ -443,6 +304,93 @@ export default function TripPage() {
                   )
                 })}
             </div>
+
+            {/* Suggested payments */}
+            {settlements.length > 0 && (
+              <div className="border-t border-neutral-100">
+                <div className="px-5 py-2.5 bg-neutral-50/80">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 flex items-center gap-1.5">
+                    <ZapIcon />
+                    Suggested payments
+                  </p>
+                </div>
+                <div className="divide-y divide-neutral-100">
+                  {settlements.map((s, i) => {
+                    const fromP = participantMap.get(s.from)
+                    const toP = participantMap.get(s.to)
+                    const note = `${fromP?.name ?? ''} → ${toP?.name ?? ''} (${trip.name})`
+                    return (
+                      <div key={i} className="px-5 py-4 flex items-center justify-between gap-3 animate-fade-in">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <ParticipantAvatar id={s.from} />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              <span className="text-neutral-900">{fromP?.name}</span>
+                              <span className="text-neutral-400 mx-1.5">pays</span>
+                              <span className="text-neutral-900">{toP?.name}</span>
+                            </p>
+                            <p className="text-xs text-neutral-500">{formatCurrency(s.amount)}</p>
+                            {toP?.payment_provider && (
+                              <p className="text-[11px] text-neutral-400 flex items-center gap-1 mt-0.5">
+                                <CreditCard className="h-2.5 w-2.5" />
+                                {providerLabel(toP.payment_provider)}
+                                {toP.payment_handle && <span className="truncate">· {toP.payment_handle}</span>}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {(() => {
+                            const link = toP ? buildPaymentLink(toP, s.amount, note) : null
+                            if (!link) return null
+                            if (toP?.payment_provider === 'interac') {
+                              return (
+                                <InteracPayButton
+                                  mailtoLink={link}
+                                  onTrack={(bank) => track('payment_link_clicked', {
+                                    trip_id: trip?.id,
+                                    trip_slug: slug,
+                                    provider: 'interac',
+                                    bank,
+                                    amount: s.amount,
+                                  })}
+                                />
+                              )
+                            }
+                            return (
+                              <a
+                                href={link}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="btn-primary text-xs group/btn"
+                                onClick={() => track('payment_link_clicked', {
+                                  trip_id: trip?.id,
+                                  trip_slug: slug,
+                                  provider: toP?.payment_provider,
+                                  amount: s.amount,
+                                })}
+                              >
+                                <span className="transition-transform group-hover/btn:rotate-12">💸</span>
+                                Pay up
+                              </a>
+                            )
+                          })()}
+                          <button
+                            onClick={() => markAsPaid(s)}
+                            className="btn-ghost text-xs text-neutral-600 hover:bg-neutral-100"
+                            title="Mark as paid"
+                          >
+                            <Wallet className="h-3.5 w-3.5" />
+                            Mark paid
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 
@@ -498,6 +446,23 @@ export default function TripPage() {
                         <p className="text-xs text-neutral-400 mt-1">
                           Split: {splitNames.join(', ')} ({formatCurrency(share)}/person)
                         </p>
+                        {exp.expense_date && (
+                          <p className="text-xs text-neutral-400 mt-1 flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            {formatExpenseDate(exp.expense_date)}
+                          </p>
+                        )}
+                        {exp.receipt_url && (
+                          <a
+                            href={exp.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 mt-1.5 text-xs text-primary-600 hover:text-primary-700 hover:underline"
+                          >
+                            <Paperclip className="h-3 w-3" />
+                            View receipt
+                          </a>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -559,7 +524,7 @@ export default function TripPage() {
       {showShareSheet && (
         <ShareSheet
           url={window.location.href}
-          title={trip?.name ?? 'Tabmate trip'}
+          title={trip?.name ?? 'Tabmate tab'}
           onClose={() => setShowShareSheet(false)}
         />
       )}
@@ -592,6 +557,8 @@ function EditableName({
     setDeleting(true)
     setError(null)
 
+    // Remove this person from any expense's split list before deleting,
+    // so the split falls back to remaining participants (or empty = everyone).
     const { error: stripError } = await supabase.rpc('strip_participant_from_splits', {
       p_trip_id: participant.trip_id,
       p_participant_id: participant.id,
@@ -631,7 +598,7 @@ function EditableName({
       return
     }
     if (existingNames.some((n) => n.toLowerCase() === trimmed.toLowerCase())) {
-      setError('That name is already used in this trip.')
+      setError('That name is already used in this tab.')
       return
     }
 
@@ -692,9 +659,19 @@ function EditableName({
   return (
     <div className="flex items-center gap-1.5 min-w-0">
       <span className="text-sm font-medium truncate">{participant.name}</span>
+      {!participant.payment_provider && (
+        <button
+          onClick={() => setShowPayment(true)}
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[11px] font-medium hover:bg-amber-100 transition-colors"
+          title="Add payment method"
+        >
+          <CreditCard className="h-3 w-3" />
+          Add payment
+        </button>
+      )}
       <button
         onClick={() => setEditing(true)}
-        className="btn-ghost !p-1 text-neutral-400 opacity-0 group-hover/p:opacity-100 transition-opacity"
+        className="btn-ghost !p-1 text-neutral-400 hover:text-primary-600 transition-colors"
         title="Edit name"
       >
         <Pencil className="h-3.5 w-3.5" />
@@ -721,7 +698,7 @@ function EditableName({
       ) : (
         <button
           onClick={() => setConfirmingDelete(true)}
-          className="btn-ghost !p-1 text-neutral-400 hover:text-red-600 opacity-0 group-hover/p:opacity-100 transition-opacity"
+          className="btn-ghost !p-1 text-neutral-400 hover:text-red-600 transition-colors"
           title="Remove person"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -729,8 +706,12 @@ function EditableName({
       )}
       <button
         onClick={() => setShowPayment(true)}
-        className="btn-ghost !p-1 text-neutral-400 hover:text-primary-600 opacity-0 group-hover/p:opacity-100 transition-opacity"
-        title="Set payment method"
+        className={
+          participant.payment_provider
+            ? 'btn-ghost !p-1 text-neutral-400 hover:text-primary-600 transition-colors'
+            : 'btn-ghost !p-1 text-amber-600 hover:text-amber-700 hover:bg-amber-50 transition-colors animate-pulse'
+        }
+        title={participant.payment_provider ? 'Edit payment method' : 'Add payment method'}
       >
         <CreditCard className="h-3.5 w-3.5" />
       </button>
@@ -771,6 +752,7 @@ function PaymentMethodEditor({
   const availableProviders = providersForCountry(country)
   const selected = availableProviders.find((p) => p.id === provider)
 
+  // If the selected provider isn't valid for the new country, reset it.
   function changeCountry(c: CountryCode) {
     setCountry(c)
     if (provider && !providersForCountry(c).some((p) => p.id === provider)) {
@@ -977,7 +959,7 @@ function AddParticipantModal({
     const lower = existingNames.map((n) => n.toLowerCase())
     const dupes = names.filter((n) => lower.includes(n.toLowerCase()))
     if (dupes.length > 0) {
-      setError(`Already in this trip: ${dupes.join(', ')}`)
+      setError(`Already in this tab: ${dupes.join(', ')}`)
       return
     }
 
@@ -1042,7 +1024,7 @@ function AddParticipantModal({
             ) : (
               <>
                 <Plus className="h-4 w-4" />
-                Add to trip
+                Add to tab
               </>
             )}
           </button>
@@ -1117,9 +1099,17 @@ function AddExpenseModal({
       ? expense.split_participant_ids
       : participants.map((p) => p.id)
   )
+  const [expenseDate, setExpenseDate] = useState<string>(
+    expense?.expense_date
+      ? new Date(expense.expense_date).toISOString().slice(0, 16)
+      : new Date().toISOString().slice(0, 16)
+  )
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
+  const [receiptFile, setReceiptFile] = useState<File | null>(null)
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(expense?.receipt_url ?? null)
+  const [saveReceipt, setSaveReceipt] = useState(true)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
   const [audioError, setAudioError] = useState<string | null>(null)
@@ -1132,6 +1122,7 @@ function AddExpenseModal({
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [recordingDuration, setRecordingDuration] = useState(0)
   const [entryMethod, setEntryMethod] = useState<'visual' | 'audio' | 'manual' | null>(null)
+  const MAX_RECORDING_SECONDS = 30
 
   function toggleSplit(id: string) {
     setSplitIds((prev) =>
@@ -1159,8 +1150,12 @@ function AddExpenseModal({
       recordStartRef.current = Date.now()
       setRecordingDuration(0)
       recordTimerRef.current = setInterval(() => {
-        setRecordingDuration(Math.floor((Date.now() - recordStartRef.current) / 1000))
-      }, 1000)
+        const elapsed = (Date.now() - recordStartRef.current) / 1000
+        setRecordingDuration(elapsed)
+        if (elapsed >= MAX_RECORDING_SECONDS) {
+          stopRecording()
+        }
+      }, 100)
       setRecording(true)
     } catch {
       setAudioError('Microphone access denied')
@@ -1260,6 +1255,9 @@ function AddExpenseModal({
       if (data.title) setTitle(data.title)
       if (data.amount) setAmount(String(data.amount))
       if (data.category && CATEGORIES.includes(data.category)) setCategory(data.category)
+      setReceiptFile(file)
+      setReceiptPreview(dataUrl)
+      setSaveReceipt(true)
       setEntryMethod('visual')
       track('receipt_scanned', { trip_id: tripId, category: data.category })
     } catch (err) {
@@ -1268,6 +1266,15 @@ function AddExpenseModal({
       setScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
+  }
+
+  async function uploadReceipt(file: File): Promise<string | null> {
+    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const fileName = `${tripId}/${crypto.randomUUID()}.${ext}`
+    const { error } = await supabase.storage.from('receipts').upload(fileName, file, { upsert: false })
+    if (error) throw new Error(`Could not save receipt image: ${error.message}`)
+    const { data: pub } = supabase.storage.from('receipts').getPublicUrl(fileName)
+    return pub.publicUrl
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -1282,6 +1289,18 @@ function AddExpenseModal({
 
     setSaving(true)
     let writeError: string | null = null
+    let finalReceiptUrl = expense?.receipt_url ?? null
+    try {
+      if (saveReceipt && receiptFile) {
+        finalReceiptUrl = await uploadReceipt(receiptFile)
+      } else if (!saveReceipt && !receiptFile) {
+        finalReceiptUrl = null
+      }
+    } catch (err) {
+      setSaving(false)
+      setError(err instanceof Error ? err.message : 'Could not save receipt image')
+      return
+    }
     if (isEditing && expense) {
       const { error } = await supabase.from('expenses').update({
         title: title.trim(),
@@ -1289,6 +1308,8 @@ function AddExpenseModal({
         paid_by: paidBy,
         category,
         split_participant_ids: splitIds,
+        expense_date: expenseDate ? new Date(expenseDate).toISOString() : null,
+        receipt_url: finalReceiptUrl,
       }).eq('id', expense.id)
       writeError = error?.message ?? null
     } else {
@@ -1299,6 +1320,8 @@ function AddExpenseModal({
         paid_by: paidBy,
         category,
         split_participant_ids: splitIds,
+        expense_date: expenseDate ? new Date(expenseDate).toISOString() : null,
+        receipt_url: finalReceiptUrl,
       })
       writeError = error?.message ?? null
     }
@@ -1368,6 +1391,21 @@ function AddExpenseModal({
               {scanError && (
                 <p className="text-xs text-red-600 -mt-2">{scanError}</p>
               )}
+              {receiptPreview && (
+                <div className="-mt-2 rounded-xl border border-neutral-200 overflow-hidden bg-neutral-50">
+                  <img src={receiptPreview} alt="Receipt preview" className="w-full max-h-48 object-contain" />
+                  <label className="flex items-center gap-2 px-3 py-2.5 text-sm text-neutral-700 cursor-pointer hover:bg-neutral-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={saveReceipt}
+                      onChange={(e) => setSaveReceipt(e.target.checked)}
+                      className="rounded border-neutral-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <Paperclip className="h-3.5 w-3.5 text-neutral-400" />
+                    Save receipt so others can see it
+                  </label>
+                </div>
+              )}
 
               <div className="flex items-center gap-3">
                 <button
@@ -1396,8 +1434,14 @@ function AddExpenseModal({
                       </div>
                       <span className="text-sm font-medium">Stop recording</span>
                       <span className="text-xs text-red-500 tabular-nums">
-                        {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(recordingDuration % 60).padStart(2, '0')} · tap when done
+                        {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(Math.floor(recordingDuration) % 60).padStart(2, '0')} · tap when done
                       </span>
+                      <div className="w-full max-w-[180px] h-1.5 rounded-full bg-red-200 overflow-hidden mt-1">
+                        <div
+                          className="h-full bg-red-500 rounded-full transition-[width] duration-100 ease-linear"
+                          style={{ width: `${Math.min(100, (recordingDuration / MAX_RECORDING_SECONDS) * 100)}%` }}
+                        />
+                      </div>
                     </>
                   ) : (
                     <>
@@ -1456,6 +1500,17 @@ function AddExpenseModal({
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="label" htmlFor="expenseDate">Date</label>
+            <input
+              id="expenseDate"
+              type="datetime-local"
+              className="input"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+            />
           </div>
 
           <div>
@@ -1520,5 +1575,165 @@ function AddExpenseModal({
         </form>
       </div>
     </div>
+  )
+}
+
+function formatExpenseDate(dateStr: string): string {
+  const d = new Date(dateStr)
+  return d.toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+}
+
+function EditableTripName({ trip, onSaved }: { trip: Trip; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(trip.name)
+  const [saving, setSaving] = useState(false)
+
+  async function save() {
+    const trimmed = name.trim()
+    if (!trimmed || trimmed === trip.name) {
+      setEditing(false)
+      setName(trip.name)
+      return
+    }
+    setSaving(true)
+    const { error } = await supabase.from('trips').update({ name: trimmed }).eq('id', trip.id)
+    setSaving(false)
+    if (error) {
+      console.error(error)
+      setName(trip.name)
+      setEditing(false)
+      return
+    }
+    setEditing(false)
+    onSaved()
+  }
+
+  if (!editing) {
+    return (
+      <h1 className="text-lg font-bold truncate flex items-center gap-1.5 group">
+        <span className="truncate">{trip.name}</span>
+        <button
+          onClick={() => setEditing(true)}
+          className="text-neutral-400 hover:text-neutral-700 transition-colors"
+          title="Rename tab"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      </h1>
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        autoFocus
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') save()
+          if (e.key === 'Escape') {
+            setName(trip.name)
+            setEditing(false)
+          }
+        }}
+        className="text-lg font-bold bg-transparent border-b border-neutral-300 focus:border-neutral-700 outline-none px-0.5 -ml-0.5 min-w-0 flex-1"
+      />
+      <button
+        onClick={save}
+        disabled={saving}
+        className="btn-ghost text-xs text-accent-600 hover:bg-accent-50 shrink-0"
+      >
+        <Check className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+function InteracPayButton({
+  mailtoLink,
+  onTrack,
+}: {
+  mailtoLink: string
+  onTrack: (bank: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('keydown', onKey)
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = ''
+    }
+  }, [open])
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="btn-primary text-xs"
+      >
+        <span>💸</span>
+        Pay via Interac
+      </button>
+      {open && createPortal(
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-[fadeIn_0.15s_ease-out]"
+            onClick={() => setOpen(false)}
+          />
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 pb-8 animate-[slideUp_0.2s_ease-out]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-neutral-900">Pay via Interac</h3>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1.5 rounded-full hover:bg-neutral-100 transition-colors"
+              >
+                <X className="h-5 w-5 text-neutral-500" />
+              </button>
+            </div>
+            <p className="text-sm text-neutral-500 mb-4">
+              Choose your bank to open online banking, or send an e-Transfer by email.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              {CANADIAN_BANKS.map((bank) => (
+                <a
+                  key={bank.name}
+                  href={bank.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => onTrack(bank.name)}
+                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97] transition-transform"
+                >
+                  <span className="h-11 w-11 rounded-xl bg-white flex items-center justify-center shrink-0 p-1.5">
+                    <BankLogo bank={bank.name} className="h-full w-full object-contain" />
+                  </span>
+                  <span className="text-sm font-medium text-neutral-800 text-center">{bank.name}</span>
+                </a>
+              ))}
+              <a
+                href={mailtoLink}
+                onClick={() => onTrack('email')}
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97] transition-transform"
+              >
+                <span className="h-11 w-11 rounded-xl flex items-center justify-center bg-neutral-700 text-white shrink-0">
+                  <Mail className="h-5 w-5" />
+                </span>
+                <span className="text-sm font-medium text-neutral-800 text-center">Email e-Transfer</span>
+              </a>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
