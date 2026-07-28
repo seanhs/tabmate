@@ -73,6 +73,7 @@ Respond with ONLY valid JSON in this exact format, no markdown, no explanation:
     const geminiData = await geminiRes.json();
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
+    // Strip any accidental markdown fences
     const cleaned = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
     let parsed: { title: string; amount: number; category: string };
@@ -85,6 +86,7 @@ Respond with ONLY valid JSON in this exact format, no markdown, no explanation:
       );
     }
 
+    // Validate category
     if (!CATEGORIES.includes(parsed.category)) {
       parsed.category = "General";
     }

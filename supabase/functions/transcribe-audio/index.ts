@@ -35,6 +35,9 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // Gemini rejects MIME types with codec suffixes (e.g. audio/webm;codecs=opus)
+    const safeMimeType = mimeType.split(";")[0].trim() || "audio/webm";
+
     const namesList = participantNames.length > 0 ? participantNames.join(", ") : "(none provided)";
 
     const prompt = `You are an expense parser. The user is describing an expense out loud.
@@ -60,21 +63,22 @@ Respond with ONLY valid JSON in this exact format, no markdown, no explanation:
           contents: [{
             parts: [
               { text: prompt },
-              { inline_data: { mime_type: mimeType, data: audioBase64 } },
+              { inline_data: { mime_type: safeMimeType, data: audioBase64 } },
             ],
           }],
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 512,
+            maxOutputTokens: 1024,
           },
         }),
       },
     );
 
     if (!geminiRes.ok) {
-      const errText = await geminiRes.text();
+      const errJson = await geminiRes.json().catch(() => null);
+      const detail = errJson?.error?.message ?? JSON.stringify(errJson);
       return new Response(
-        JSON.stringify({ error: `Gemini API error: ${geminiRes.status}`, detail: errText }),
+        JSON.stringify({ error: detail ?? `Gemini API error (${geminiRes.status})` }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -82,7 +86,13 @@ Respond with ONLY valid JSON in this exact format, no markdown, no explanation:
     const geminiData = await geminiRes.json();
     const rawText = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
-    const cleaned = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    // Strip markdown fences, then extract the outermost JSON object
+    const fenceStripped = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    const jsonStart = fenceStripped.indexOf("{");
+    const jsonEnd = fenceStripped.lastIndexOf("}");
+    const cleaned = jsonStart !== -1 && jsonEnd !== -1
+      ? fenceStripped.slice(jsonStart, jsonEnd + 1)
+      : fenceStripped;
 
     let parsed: {
       title: string | null;
@@ -96,7 +106,7 @@ Respond with ONLY valid JSON in this exact format, no markdown, no explanation:
       parsed = JSON.parse(cleaned);
     } catch {
       return new Response(
-        JSON.stringify({ error: "Could not parse Gemini response", raw: rawText }),
+        JSON.stringify({ error: `Could not parse Gemini response: ${rawText.slice(0, 200)}` }),
         { status: 422, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
