@@ -47,6 +47,16 @@ export const PAYMENT_PROVIDERS: {
   { id: 'other', label: 'Other', hint: 'A full payment link (e.g. bank details URL)', countries: ['US', 'CA', 'GB', 'EU', 'AU', 'OTHER'] },
 ]
 
+export const CANADIAN_BANKS: { name: string; url: string; color: string }[] = [
+  { name: 'RBC', url: 'https://www.rbc.com/personal/ways-to-bank/online-banking.html', color: '#003168' },
+  { name: 'TD', url: 'https://www.td.com/ca/en/personal-banking', color: '#008A00' },
+  { name: 'Scotiabank', url: 'https://www.scotiabank.com/ca/en/personal/ways-to-bank/digital-banking.html', color: '#EC1112' },
+  { name: 'BMO', url: 'https://www.bmo.com/main/personal', color: '#0075BE' },
+  { name: 'CIBC', url: 'https://www.cibc.com/en/personal/ways-to-bank/online-banking.html', color: '#841F2C' },
+  { name: 'Wealthsimple', url: 'https://my.wealthsimple.com', color: '#0D6025' },
+  { name: 'Tangerine', url: 'https://www.tangerine.ca', color: '#FF6A00' },
+]
+
 export function providersForCountry(country: CountryCode): typeof PAYMENT_PROVIDERS {
   return PAYMENT_PROVIDERS.filter((p) => p.countries.includes(country))
 }
@@ -70,6 +80,8 @@ export type Expense = {
   category: string
   split_participant_ids: string[]
   created_at: string
+  expense_date: string | null
+  receipt_url: string | null
 }
 
 export type TripWithParticipants = Trip & {

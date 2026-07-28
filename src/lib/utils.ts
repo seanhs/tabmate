@@ -1,5 +1,5 @@
 /**
- * Generate a URL-safe slug for a trip.
+ * Generate a URL-safe slug for a tab.
  * Format: <sanitized-name>-<random-4-char-hex>
  */
 export function generateSlug(name: string): string {
@@ -8,7 +8,7 @@ export function generateSlug(name: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 30) || 'trip'
+    .slice(0, 30) || 'tab'
   const suffix = Math.random().toString(16).slice(2, 6)
   return `${base}-${suffix}`
 }
@@ -18,7 +18,7 @@ export function generateSlug(name: string): string {
  */
 export function parseNames(input: string): string[] {
   return input
-    .split(/[,\n]/)
+    .split(/[ ,\n]/)
     .map((n) => n.trim())
     .filter((n) => n.length > 0)
 }

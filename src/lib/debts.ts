@@ -32,15 +32,21 @@ export function calculateBalances(
       ? expense.split_participant_ids
       : participants.map((p) => p.id)
 
-    const share = expense.amount / splitIds.length
+    // Compute shares in integer cents so the split always sums exactly to
+    // the expense amount. Any remainder penny is distributed to the first
+    // few people in the split list.
+    const totalCents = Math.round(expense.amount * 100)
+    const baseShareCents = Math.floor(totalCents / splitIds.length)
+    const remainderCents = totalCents - baseShareCents * splitIds.length
 
     // The payer's balance goes up by the full amount (they fronted the money)
     balances.set(expense.paid_by, (balances.get(expense.paid_by) ?? 0) + expense.amount)
 
     // Each person in the split owes their share
-    for (const pid of splitIds) {
-      balances.set(pid, (balances.get(pid) ?? 0) - share)
-    }
+    splitIds.forEach((pid, i) => {
+      const shareCents = baseShareCents + (i < remainderCents ? 1 : 0)
+      balances.set(pid, (balances.get(pid) ?? 0) - shareCents / 100)
+    })
   }
 
   // Confirmed payments reduce what the sender still owes and what the

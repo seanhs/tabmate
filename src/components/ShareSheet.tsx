@@ -112,7 +112,7 @@ export default function ShareSheet({ url, title, onClose }: ShareSheetProps) {
         </div>
 
         <div className="px-5 pt-3 pb-2 flex items-center justify-between">
-          <h2 className="text-base font-semibold">Share this trip</h2>
+          <h2 className="text-base font-semibold">Share this tab</h2>
           <button onClick={onClose} className="btn-ghost -mr-2">
             <X className="h-4 w-4" />
           </button>
