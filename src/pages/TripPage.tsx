@@ -151,6 +151,8 @@ export default function TripPage() {
     loadData()
   }
 
+
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-neutral-50">
@@ -717,6 +719,8 @@ function EditableName({
     setDeleting(true)
     setError(null)
 
+    // Remove this person from any expense's split list before deleting,
+    // so the split falls back to remaining participants (or empty = everyone).
     const { error: stripError } = await supabase.rpc('strip_participant_from_splits', {
       p_trip_id: participant.trip_id,
       p_participant_id: participant.id,
@@ -910,6 +914,7 @@ function PaymentMethodEditor({
   const availableProviders = providersForCountry(country)
   const selected = availableProviders.find((p) => p.id === provider)
 
+  // If the selected provider isn't valid for the new country, reset it.
   function changeCountry(c: CountryCode) {
     setCountry(c)
     if (provider && !providersForCountry(c).some((p) => p.id === provider)) {
