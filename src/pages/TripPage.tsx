@@ -42,6 +42,7 @@ export default function TripPage() {
   const [showShareSheet, setShowShareSheet] = useState(false)
   const [showAddPersonModal, setShowAddPersonModal] = useState(false)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [activeTab, setActiveTab] = useState<'people' | 'expenses' | 'payments'>('people')
 
   const loadData = useCallback(async () => {
     if (!slug) return
@@ -226,14 +227,60 @@ export default function TripPage() {
           </div>
         </div>
 
-        {/* Settle up — balances + suggested payments in one card */}
-        {participants.length > 0 && (
+        {/* Tab bar */}
+        <div className="flex gap-1 p-1 bg-neutral-100 rounded-xl">
+          <button
+            onClick={() => setActiveTab('people')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'people'
+                ? 'bg-white text-neutral-900 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            }`}
+          >
+            <Users className="h-4 w-4" />
+            People
+            {participants.length > 0 && (
+              <span className="text-xs text-neutral-400">{participants.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('expenses')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'expenses'
+                ? 'bg-white text-neutral-900 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            }`}
+          >
+            <Receipt className="h-4 w-4" />
+            Expenses
+            {expenses.length > 0 && (
+              <span className="text-xs text-neutral-400">{expenses.length}</span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('payments')}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+              activeTab === 'payments'
+                ? 'bg-white text-neutral-900 shadow-sm'
+                : 'text-neutral-500 hover:text-neutral-700'
+            }`}
+          >
+            <HandCoins className="h-4 w-4" />
+            Payments
+            {settlements.length > 0 && (
+              <span className="text-xs text-neutral-400">{settlements.length}</span>
+            )}
+          </button>
+        </div>
+
+        {/* People tab */}
+        {activeTab === 'people' && participants.length > 0 && (
           <div className="card overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent flex items-center justify-between">
               <div>
                 <h2 className="font-semibold flex items-center gap-2">
                   <ZapIcon />
-                  Settle up
+                  Balances
                 </h2>
                 <div className="text-xs text-neutral-500 mt-0.5">
                   {settlements.length > 0
@@ -241,22 +288,13 @@ export default function TripPage() {
                     : 'Everyone is settled up'}
                 </div>
               </div>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => setShowPaymentModal(true)}
-                  className="btn-ghost text-xs text-primary-600"
-                >
-                  <HandCoins className="h-3.5 w-3.5" />
-                  Record payment
-                </button>
-                <button
-                  onClick={() => setShowAddPersonModal(true)}
-                  className="btn-ghost text-xs text-primary-600"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add person
-                </button>
-              </div>
+              <button
+                onClick={() => setShowAddPersonModal(true)}
+                className="btn-ghost text-xs text-primary-600"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add person
+              </button>
             </div>
 
             {/* Per-person balances */}
@@ -317,14 +355,49 @@ export default function TripPage() {
                 })}
             </div>
 
+          </div>
+        )}
+
+        {/* People tab empty state */}
+        {activeTab === 'people' && participants.length === 0 && (
+          <div className="card p-12 text-center">
+            <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400 mb-4">
+              <Users className="h-6 w-6" />
+            </div>
+            <p className="font-medium text-neutral-700">No people yet</p>
+            <p className="text-sm text-neutral-500 mt-1 mb-4">
+              Add people to start splitting expenses.
+            </p>
+            <button onClick={() => setShowAddPersonModal(true)} className="btn-primary">
+              <Plus className="h-4 w-4" />
+              Add person
+            </button>
+          </div>
+        )}
+
+        {/* Payments tab */}
+        {activeTab === 'payments' && (
+          <>
             {/* Suggested payments */}
             {settlements.length > 0 && (
-              <div className="border-t border-neutral-100">
-                <div className="px-5 py-2.5 bg-neutral-50/80">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 flex items-center gap-1.5">
-                    <ZapIcon />
-                    Suggested payments
-                  </p>
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent flex items-center justify-between">
+                  <div>
+                    <h2 className="font-semibold flex items-center gap-2">
+                      <ZapIcon />
+                      Suggested payments
+                    </h2>
+                    <div className="text-xs text-neutral-500 mt-0.5">
+                      {settlements.length} payment{settlements.length === 1 ? '' : 's'} remaining
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowPaymentModal(true)}
+                    className="btn-ghost text-xs text-primary-600"
+                  >
+                    <HandCoins className="h-3.5 w-3.5" />
+                    Record payment
+                  </button>
                 </div>
                 <div className="divide-y divide-neutral-100">
                   {settlements.map((s, i) => {
@@ -403,55 +476,72 @@ export default function TripPage() {
               </div>
             )}
 
-          </div>
-        )}
-
-        {/* Payment history */}
-        {payments.length > 0 && (
-          <div className="card overflow-hidden">
-            <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent">
-              <h2 className="font-semibold flex items-center gap-2">
-                <History className="h-4 w-4 text-primary-600" />
-                Payment history
-              </h2>
-              <div className="text-xs text-neutral-500 mt-0.5">
-                {payments.length} recorded payment{payments.length === 1 ? '' : 's'}
-              </div>
-            </div>
-            <div className="divide-y divide-neutral-100">
-              {payments.map((pay) => {
-                const fromP = participantMap.get(pay.from_participant_id)
-                const toP = participantMap.get(pay.to_participant_id)
-                return (
-                  <div key={pay.id} className="px-5 py-3.5 flex items-center justify-between gap-3 group">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 shrink-0">
-                        <HandCoins className="h-4.5 w-4.5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          <span className="text-neutral-900">{fromP?.name}</span>
-                          <span className="text-neutral-400 mx-1.5">paid</span>
-                          <span className="text-neutral-900">{toP?.name}</span>
-                        </p>
-                        <p className="text-xs text-neutral-500">
-                          {formatCurrency(Number(pay.amount))}
-                          {pay.note && <span className="text-neutral-400"> · {pay.note}</span>}
-                          {' · '}
-                          {new Date(pay.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                        </p>
-                      </div>
-                    </div>
-                    <DeletePaymentButton paymentId={pay.id} onDelete={loadData} />
+            {/* Payment history */}
+            {payments.length > 0 && (
+              <div className="card overflow-hidden">
+                <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent">
+                  <h2 className="font-semibold flex items-center gap-2">
+                    <History className="h-4 w-4 text-primary-600" />
+                    Payment history
+                  </h2>
+                  <div className="text-xs text-neutral-500 mt-0.5">
+                    {payments.length} recorded payment{payments.length === 1 ? '' : 's'}
                   </div>
-                )
-              })}
-            </div>
-          </div>
+                </div>
+                <div className="divide-y divide-neutral-100">
+                  {payments.map((pay) => {
+                    const fromP = participantMap.get(pay.from_participant_id)
+                    const toP = participantMap.get(pay.to_participant_id)
+                    return (
+                      <div key={pay.id} className="px-5 py-3.5 flex items-center justify-between gap-3 group">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 shrink-0">
+                            <HandCoins className="h-4.5 w-4.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">
+                              <span className="text-neutral-900">{fromP?.name}</span>
+                              <span className="text-neutral-400 mx-1.5">paid</span>
+                              <span className="text-neutral-900">{toP?.name}</span>
+                            </p>
+                            <p className="text-xs text-neutral-500">
+                              {formatCurrency(Number(pay.amount))}
+                              {pay.note && <span className="text-neutral-400"> · {pay.note}</span>}
+                              {' · '}
+                              {new Date(pay.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                        </div>
+                        <DeletePaymentButton paymentId={pay.id} onDelete={loadData} />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Payments empty state */}
+            {settlements.length === 0 && payments.length === 0 && (
+              <div className="card p-12 text-center">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-neutral-100 text-neutral-400 mb-4">
+                  <HandCoins className="h-6 w-6" />
+                </div>
+                <p className="font-medium text-neutral-700">No payments yet</p>
+                <p className="text-sm text-neutral-500 mt-1 mb-4">
+                  Everyone is settled up, or record a payment manually.
+                </p>
+                <button onClick={() => setShowPaymentModal(true)} className="btn-primary">
+                  <HandCoins className="h-4 w-4" />
+                  Record payment
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Expenses list */}
-        <div>
+        {/* Expenses tab */}
+        {activeTab === 'expenses' && (
+          <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold">Expenses</h2>
             <button onClick={() => setShowAddModal(true)} className="btn-primary">
@@ -538,6 +628,7 @@ export default function TripPage() {
             </div>
           )}
         </div>
+        )}
       </main>
 
       {showAddModal && (
