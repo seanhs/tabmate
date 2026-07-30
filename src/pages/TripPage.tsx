@@ -5,11 +5,13 @@ import {
   Receipt, Plus, ArrowLeft, Share2, Check, Loader2,
   Users, TrendingUp, TrendingDown, CheckCircle2, Trash2, X, Wallet, Pencil, CreditCard,
   Camera, ScanLine, Mic, Calendar, Paperclip,
-  Mail,
+  Mail, HandCoins, History,
 } from 'lucide-react'
 import ShareSheet from '../components/ShareSheet'
 import { ParticipantAvatar } from '../components/ParticipantAvatar'
 import { BankLogo } from '../components/BankLogo'
+import RecordPaymentModal from '../components/RecordPaymentModal'
+import DeletePaymentButton from '../components/DeletePaymentButton'
 import Footer from '../components/Footer'
 import { supabase, type Trip, type Participant, type Expense, type Payment } from '../lib/supabase'
 import { parseNames } from '../lib/utils'
@@ -39,6 +41,7 @@ export default function TripPage() {
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null)
   const [showShareSheet, setShowShareSheet] = useState(false)
   const [showAddPersonModal, setShowAddPersonModal] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!slug) return
@@ -238,13 +241,22 @@ export default function TripPage() {
                     : 'Everyone is settled up'}
                 </div>
               </div>
-              <button
-                onClick={() => setShowAddPersonModal(true)}
-                className="btn-ghost text-xs text-primary-600 shrink-0"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add person
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => setShowPaymentModal(true)}
+                  className="btn-ghost text-xs text-primary-600"
+                >
+                  <HandCoins className="h-3.5 w-3.5" />
+                  Record payment
+                </button>
+                <button
+                  onClick={() => setShowAddPersonModal(true)}
+                  className="btn-ghost text-xs text-primary-600"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add person
+                </button>
+              </div>
             </div>
 
             {/* Per-person balances */}
@@ -394,6 +406,50 @@ export default function TripPage() {
           </div>
         )}
 
+        {/* Payment history */}
+        {payments.length > 0 && (
+          <div className="card overflow-hidden">
+            <div className="px-5 py-4 border-b border-neutral-100 bg-gradient-to-r from-primary-50/50 to-transparent">
+              <h2 className="font-semibold flex items-center gap-2">
+                <History className="h-4 w-4 text-primary-600" />
+                Payment history
+              </h2>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                {payments.length} recorded payment{payments.length === 1 ? '' : 's'}
+              </div>
+            </div>
+            <div className="divide-y divide-neutral-100">
+              {payments.map((pay) => {
+                const fromP = participantMap.get(pay.from_participant_id)
+                const toP = participantMap.get(pay.to_participant_id)
+                return (
+                  <div key={pay.id} className="px-5 py-3.5 flex items-center justify-between gap-3 group">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-50 text-primary-600 shrink-0">
+                        <HandCoins className="h-4.5 w-4.5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          <span className="text-neutral-900">{fromP?.name}</span>
+                          <span className="text-neutral-400 mx-1.5">paid</span>
+                          <span className="text-neutral-900">{toP?.name}</span>
+                        </p>
+                        <p className="text-xs text-neutral-500">
+                          {formatCurrency(Number(pay.amount))}
+                          {pay.note && <span className="text-neutral-400"> · {pay.note}</span>}
+                          {' · '}
+                          {new Date(pay.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                    <DeletePaymentButton paymentId={pay.id} onDelete={loadData} />
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Expenses list */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -521,6 +577,19 @@ export default function TripPage() {
         />
       )}
 
+      {showPaymentModal && (
+        <RecordPaymentModal
+          tripId={trip.id}
+          participants={participants}
+          balances={balances}
+          onClose={() => setShowPaymentModal(false)}
+          onAdded={() => {
+            setShowPaymentModal(false)
+            loadData()
+          }}
+        />
+      )}
+
       {showShareSheet && (
         <ShareSheet
           url={window.location.href}
@@ -557,8 +626,6 @@ function EditableName({
     setDeleting(true)
     setError(null)
 
-    // Remove this person from any expense's split list before deleting,
-    // so the split falls back to remaining participants (or empty = everyone).
     const { error: stripError } = await supabase.rpc('strip_participant_from_splits', {
       p_trip_id: participant.trip_id,
       p_participant_id: participant.id,
@@ -752,7 +819,6 @@ function PaymentMethodEditor({
   const availableProviders = providersForCountry(country)
   const selected = availableProviders.find((p) => p.id === provider)
 
-  // If the selected provider isn't valid for the new country, reset it.
   function changeCountry(c: CountryCode) {
     setCountry(c)
     if (provider && !providersForCountry(c).some((p) => p.id === provider)) {
