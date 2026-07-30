@@ -7,7 +7,7 @@ let initialized = false
 
 function ensureInit() {
   if (initialized) return
-  const key = import.meta.env.VITE_POSTHOG_KEY
+  const key = import.meta.env.VITE_POSTHOG_KEY ?? 'phc_AwmhmHLkV2jftavxEMcHV5jKPMP3sAabmcvs6ddSkAv5'
   if (key) {
     posthog.init(key, {
       api_host: 'https://us.i.posthog.com',
