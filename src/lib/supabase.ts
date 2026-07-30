@@ -104,4 +104,5 @@ export type Payment = {
   status: PaymentStatus
   created_at: string
   confirmed_at: string | null
+  note: string | null
 }
