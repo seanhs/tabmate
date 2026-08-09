@@ -570,12 +570,15 @@ export default function TripPage() {
             <div className="space-y-3">
               {expenses.map((exp) => {
                 const payer = participantMap.get(exp.paid_by)
-                const splitIds = exp.split_participant_ids.length > 0
-                  ? exp.split_participant_ids
-                  : participants.map((p) => p.id)
-                const splitNames = splitIds
-                  .map((id) => participantMap.get(id)?.name)
-                  .filter(Boolean)
+                const isEveryone = exp.split_participant_ids.length === 0
+                const splitIds = isEveryone
+                  ? participants.map((p) => p.id)
+                  : exp.split_participant_ids
+                const splitNames = isEveryone
+                  ? ['Everyone']
+                  : splitIds
+                      .map((id) => participantMap.get(id)?.name)
+                      .filter(Boolean)
                 const share = Number(exp.amount) / splitIds.length
 
                 return (
@@ -1257,10 +1260,9 @@ function AddExpenseModal({
   const [paidBy, setPaidBy] = useState(expense?.paid_by ?? participants[0]?.id ?? '')
   const [category, setCategory] = useState(expense?.category ?? 'General')
   const [splitIds, setSplitIds] = useState<string[]>(
-    expense && expense.split_participant_ids.length > 0
-      ? expense.split_participant_ids
-      : participants.map((p) => p.id)
+    expense ? expense.split_participant_ids : []
   )
+  const splitEveryone = splitIds.length === 0
   const [expenseDate, setExpenseDate] = useState<string>(
     expense?.expense_date
       ? new Date(expense.expense_date).toISOString().slice(0, 16)
@@ -1290,6 +1292,10 @@ function AddExpenseModal({
     setSplitIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     )
+  }
+
+  function selectEveryone() {
+    setSplitIds([])
   }
 
   async function startRecording() {
@@ -1447,7 +1453,7 @@ function AddExpenseModal({
     const amt = parseFloat(amount)
     if (isNaN(amt) || amt <= 0) return setError('Enter a valid amount.')
     if (!paidBy) return setError('Pick who paid.')
-    if (splitIds.length === 0) return setError('Pick at least one person to split with.')
+    // splitIds.length === 0 means "everyone" — always valid as long as there are participants
 
     setSaving(true)
     let writeError: string | null = null
@@ -1692,6 +1698,18 @@ function AddExpenseModal({
           <div>
             <label className="label">Split between</label>
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={selectEveryone}
+                className={`rounded-full px-3.5 py-2 text-sm font-medium transition-all ${
+                  splitEveryone
+                    ? 'bg-primary-600 text-white shadow-sm'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                }`}
+              >
+                {splitEveryone && <Check className="h-3.5 w-3.5 inline mr-1 -ml-0.5" />}
+                Everyone
+              </button>
               {participants.map((p) => {
                 const selected = splitIds.includes(p.id)
                 return (
@@ -1711,11 +1729,17 @@ function AddExpenseModal({
                 )
               })}
             </div>
-            {splitIds.length > 0 && amount && !isNaN(parseFloat(amount)) && (
-              <p className="mt-2 text-xs text-neutral-500">
-                {formatCurrency(parseFloat(amount) / splitIds.length)} per person
-              </p>
-            )}
+            {splitEveryone
+              ? amount && !isNaN(parseFloat(amount)) && participants.length > 0 && (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    {formatCurrency(parseFloat(amount) / participants.length)} per person
+                  </p>
+                )
+              : splitIds.length > 0 && amount && !isNaN(parseFloat(amount)) && (
+                  <p className="mt-2 text-xs text-neutral-500">
+                    {formatCurrency(parseFloat(amount) / splitIds.length)} per person
+                  </p>
+                )}
           </div>
 
           {error && (
