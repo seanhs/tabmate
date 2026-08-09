@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Receipt, Share2, Zap, ArrowRight, Check, Loader2, Clock, X, Users } from 'lucide-react'
+import { Receipt, Share2, Zap, ArrowRight, Check, Loader2, Clock, X, Users, Camera, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Footer from '../components/Footer'
 import { generateSlug, parseNames } from '../lib/utils'
@@ -103,9 +103,12 @@ export default function HomePage() {
 
           <div className="mt-8 grid sm:grid-cols-3 gap-3 text-left">
             {[
-              { icon: Share2, text: 'Share one link — everyone joins instantly' },
+              { icon: Camera, text: 'Snap a receipt — we read it for you' },
+              { icon: Mic, text: 'Say it out loud — we transcribe it' },
               { icon: Zap, text: 'Smart algorithm finds the fewest payments' },
+              { icon: Share2, text: 'Share one link — everyone joins instantly' },
               { icon: Check, text: 'No accounts, no friction, no awkward math' },
+              { icon: Receipt, text: 'Track every expense, split any way' },
             ].map((f, i) => (
               <div key={i} className="flex items-center gap-3 text-neutral-700">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
@@ -125,8 +128,8 @@ export default function HomePage() {
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { step: '01', title: 'Create a tab', text: 'Name it, list the people involved, and you get a shareable link instantly.', Icon: Users },
-              { step: '02', title: 'Add expenses', text: 'Anyone with the link logs what they paid and who it covers. No math required.', Icon: Receipt },
-              { step: '03', title: 'Settle smart', text: 'We calculate the fewest payments to make everyone whole. Tap to pay via Venmo or Cash App.', Icon: Zap },
+              { step: '02', title: 'Add expenses', text: "Snap a photo of a receipt and we'll pull the details automatically. Or tap the mic and just say what you spent — we'll transcribe and fill it in for you. No typing, no math.", Icon: Camera, MicIcon: Mic },
+              { step: '03', title: 'Settle smart', text: 'We calculate the fewest payments to make everyone whole. Tap to pay via Venmo, Cash App, or Interac.', Icon: Zap },
             ].map((s, i) => (
               <div key={i} className="text-center">
                 <div className="inline-flex h-14 w-14 items-center justify-center rounded-full bg-primary-50 text-primary-600 mb-4">
@@ -135,6 +138,12 @@ export default function HomePage() {
                 <div className="text-xs font-semibold text-primary-600 mb-1">{s.step}</div>
                 <h3 className="font-semibold mb-2">{s.title}</h3>
                 <p className="text-sm text-neutral-600 leading-relaxed">{s.text}</p>
+                {s.MicIcon && (
+                  <div className="mt-3 flex items-center justify-center gap-1.5 text-xs text-accent-600">
+                    <s.MicIcon className="h-3.5 w-3.5" />
+                    <span className="font-medium">Voice input included</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
