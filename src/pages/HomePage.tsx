@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Receipt, Zap, ArrowRight, Loader2, Clock, X, Users, Camera, Mic } from 'lucide-react'
+import { Receipt, Zap, ArrowRight, Loader2, Clock, X, Users, Camera, Mic, Share2, Calculator } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Footer from '../components/Footer'
 import { generateSlug, parseNames } from '../lib/utils'
@@ -192,7 +192,7 @@ export default function HomePage() {
             onClick={() => document.getElementById('new-tab')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
             className="mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-primary-600/25 transition-all hover:bg-primary-700 hover:shadow-xl hover:shadow-primary-600/30 active:scale-[0.98]"
           >
-            Create a Free Trip Link
+            Create a Free Tab
             <ArrowRight className="h-5 w-5" />
           </button>
           <p className="mt-3 text-sm text-neutral-500 font-medium">
@@ -201,12 +201,14 @@ export default function HomePage() {
 
           <div className="mt-10 grid sm:grid-cols-3 gap-3 text-left">
             {[
-              { emoji: '🔗', text: 'Share one link — everyone joins instantly' },
-              { emoji: '🎤', text: 'Voice & Receipt AI — log expenses in seconds' },
-              { emoji: '🧮', text: 'Smart Algorithm — finds fewest payments' },
+              { Icon: Share2, text: 'Share one link — everyone joins instantly' },
+              { Icon: Mic, text: 'Voice & Receipt AI — log expenses in seconds' },
+              { Icon: Calculator, text: 'Smart Algorithm — finds fewest payments' },
             ].map((f, i) => (
-              <div key={i} className="flex items-center gap-3 text-neutral-700 rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-sm">
-                <span className="text-xl shrink-0">{f.emoji}</span>
+              <div key={i} className="flex items-center gap-3 text-neutral-700 rounded-xl border border-neutral-200 bg-white px-4 py-3.5 shadow-sm transition-all hover:border-primary-200 hover:shadow-md">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
+                  <f.Icon className="h-5 w-5" />
+                </span>
                 <span className="text-sm font-medium">{f.text}</span>
               </div>
             ))}
@@ -293,7 +295,7 @@ export default function HomePage() {
       )}
 
       {/* Start a new tab */}
-      <section className="max-w-6xl mx-auto px-6 pt-14 pb-20">
+      <section id="new-tab" className="max-w-6xl mx-auto px-6 pt-14 pb-20 scroll-mt-8">
         <div className="max-w-md mx-auto animate-slide-up">
           <div className="card p-8">
             <h2 className="text-xl font-bold mb-1">Start a new tab</h2>
