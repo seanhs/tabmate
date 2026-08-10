@@ -1,4 +1,5 @@
 import { Coffee } from 'lucide-react'
+import { track } from '../lib/analytics'
 
 export default function Footer() {
   return (
@@ -7,8 +8,9 @@ export default function Footer() {
         <p>Enjoying Tabmate? Support future development.</p>
         <a
           href="https://www.buymeacoffee.com/tabmate"
-          target="_blank"
+          target="blank"
           rel="noopener noreferrer"
+          onClick={() => track('payment_action_clicked', { type: 'buymeacoffee' })}
           className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3.5 py-1.5 text-amber-700 font-medium hover:bg-amber-100 transition-colors"
         >
           <Coffee className="h-4 w-4" />

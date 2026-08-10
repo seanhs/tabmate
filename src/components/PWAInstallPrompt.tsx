@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { X, Download } from 'lucide-react'
+import { track } from '../lib/analytics'
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>
@@ -44,14 +45,15 @@ export default function PWAInstallPrompt() {
   const dismiss = () => {
     setShowBanner(false)
     sessionStorage.setItem(DISMISS_KEY, '1')
+    track('pwa_prompt_clicked', { action: 'dismissed' })
   }
 
   const install = async () => {
     if (deferredPrompt) {
       await deferredPrompt.prompt()
       const choice = await deferredPrompt.userChoice
-      if (choice.outcome === 'accepted') dismiss()
-      else dismiss()
+      track('pwa_prompt_clicked', { action: choice.outcome === 'accepted' ? 'installed' : 'dismissed' })
+      dismiss()
       setDeferredPrompt(null)
     } else {
       dismiss()
