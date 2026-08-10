@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 import {
@@ -434,6 +434,8 @@ export default function TripPage() {
                               return (
                                 <InteracPayButton
                                   mailtoLink={link}
+                                  recipientEmail={toP?.payment_handle ?? ''}
+                                  amount={s.amount}
                                   onTrack={(bank) => track('payment_link_clicked', {
                                     trip_id: trip?.id,
                                     trip_slug: slug,
@@ -476,6 +478,15 @@ export default function TripPage() {
                   })}
                 </div>
               </div>
+            )}
+
+            {settlements.length > 0 && (
+              <CopyChatSummaryButton
+                tripName={trip.name}
+                settlements={settlements}
+                participantMap={participantMap}
+                tripUrl={window.location.href}
+              />
             )}
 
             {/* Payment history */}
@@ -1546,7 +1557,7 @@ function AddExpenseModal({
                 {scanning ? (
                   <>
                     <ScanLine className="h-5 w-5 animate-pulse" />
-                    <span className="text-sm font-medium">Reading receipt...</span>
+                    <span className="text-sm font-medium">Scanning receipt...</span>
                   </>
                 ) : (
                   <>
@@ -1589,7 +1600,7 @@ function AddExpenseModal({
                   {transcribing ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      <span className="text-sm font-medium">Processing...</span>
+                      <span className="text-sm font-medium">Parsing voice note with AI...</span>
                     </>
                   ) : recording ? (
                     <>
@@ -1627,7 +1638,35 @@ function AddExpenseModal({
           )}
 
           <div>
-            <label className="label" htmlFor="title">What was it?</label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="label !mb-0" htmlFor="title">What was it?</label>
+              {!isEditing && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={scanning || transcribing}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-primary-600 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                    title="Scan receipt"
+                  >
+                    <Camera className="h-3.5 w-3.5" />
+                    Scan Receipt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={recording ? stopRecording : startRecording}
+                    disabled={scanning || transcribing}
+                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
+                      recording ? 'text-red-600 hover:bg-red-50' : 'text-accent-600 hover:bg-accent-50'
+                    }`}
+                    title="Voice log"
+                  >
+                    <Mic className="h-3.5 w-3.5" />
+                    Voice Log
+                  </button>
+                </div>
+              )}
+            </div>
             <input
               id="title"
               className="input"
@@ -1636,6 +1675,18 @@ function AddExpenseModal({
               onChange={(e) => setTitle(e.target.value)}
               autoFocus
             />
+            {transcribing && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-accent-50 px-3 py-1.5 text-xs font-medium text-accent-700 animate-pulse">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Parsing voice note with AI...
+              </div>
+            )}
+            {scanning && (
+              <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-primary-50 px-3 py-1.5 text-xs font-medium text-primary-700 animate-pulse">
+                <ScanLine className="h-3.5 w-3.5 animate-pulse" />
+                Scanning receipt...
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -1841,11 +1892,102 @@ function EditableTripName({ trip, onSaved }: { trip: Trip; onSaved: () => void }
   )
 }
 
+function CopyChatSummaryButton({
+  tripName,
+  settlements,
+  participantMap,
+  tripUrl,
+}: {
+  tripName: string
+  settlements: Settlement[]
+  participantMap: Map<string, Participant>
+  tripUrl: string
+}) {
+  const [copied, setCopied] = useState(false)
+
+  const summaryText = useMemo(() => {
+    const lines = settlements.map((s) => {
+      const fromP = participantMap.get(s.from)
+      const toP = participantMap.get(s.to)
+      return `• ${fromP?.name ?? 'Someone'} owes ${toP?.name ?? 'someone'} $${s.amount.toFixed(2)}`
+    })
+    return `✈️ ${tripName} Tabmate Summary:\n${lines.join('\n')}\n\n🔗 View breakdown or settle up: ${tripUrl}`
+  }, [tripName, settlements, participantMap, tripUrl])
+
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(summaryText)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2500)
+          track('chat_summary_copied', { trip_name: tripName })
+        } catch { /* clipboard not available */ }
+      }}
+      className={`w-full rounded-xl border px-5 py-3.5 flex items-center justify-center gap-2 text-sm font-semibold transition-all active:scale-[0.98] ${
+        copied
+          ? 'border-accent-200 bg-accent-50 text-accent-700'
+          : 'border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50'
+      }`}
+    >
+      {copied ? (
+        <>
+          <Check className="h-4 w-4" />
+          Summary copied to clipboard!
+        </>
+      ) : (
+        <>
+          <span>📋</span>
+          Copy Chat Summary
+        </>
+      )}
+    </button>
+  )
+}
+
+const BANK_DEEP_LINKS: Record<string, string> = {
+  RBC: 'rbcmobile://',
+  TD: 'tdbank://',
+  Scotiabank: 'scotiaapp://',
+  BMO: 'bmomobile://',
+  CIBC: 'cibc://',
+  Tangerine: 'tangerineapp://',
+  Wealthsimple: 'wealthsimple://',
+}
+
+function CopyButton({ text, label, icon }: { text: string; label: string; icon: React.ReactNode }) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text)
+          setCopied(true)
+          setTimeout(() => setCopied(false), 2000)
+        } catch { /* clipboard not available */ }
+      }}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all active:scale-[0.97] ${
+        copied
+          ? 'bg-accent-100 text-accent-700'
+          : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200'
+      }`}
+    >
+      {copied ? <Check className="h-3.5 w-3.5" /> : icon}
+      {copied ? 'Copied!' : label}
+    </button>
+  )
+}
+
 function InteracPayButton({
   mailtoLink,
+  recipientEmail,
+  amount,
   onTrack,
 }: {
   mailtoLink: string
+  recipientEmail: string
+  amount: number
   onTrack: (bank: string) => void
 }) {
   const [open, setOpen] = useState(false)
@@ -1860,6 +2002,8 @@ function InteracPayButton({
       document.body.style.overflow = ''
     }
   }, [open])
+
+  const amountStr = amount.toFixed(2)
 
   return (
     <>
@@ -1876,7 +2020,7 @@ function InteracPayButton({
             className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-[fadeIn_0.15s_ease-out]"
             onClick={() => setOpen(false)}
           />
-          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 pb-8 animate-[slideUp_0.2s_ease-out]">
+          <div className="relative w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 pb-8 animate-[slideUp_0.2s_ease-out] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-neutral-900">Pay via Interac</h3>
               <button
@@ -1886,18 +2030,32 @@ function InteracPayButton({
                 <X className="h-5 w-5 text-neutral-500" />
               </button>
             </div>
+
+            {recipientEmail && (
+              <div className="flex gap-2 mb-4">
+                <CopyButton
+                  text={recipientEmail}
+                  label="Copy Email"
+                  icon={<Mail className="h-3.5 w-3.5" />}
+                />
+                <CopyButton
+                  text={amountStr}
+                  label={`Copy $${amountStr}`}
+                  icon={<Wallet className="h-3.5 w-3.5" />}
+                />
+              </div>
+            )}
+
             <p className="text-sm text-neutral-500 mb-4">
-              Choose your bank to open online banking, or send an e-Transfer by email.
+              Tap your bank to open its app, or send an e-Transfer by email.
             </p>
             <div className="grid grid-cols-2 gap-3">
               {CANADIAN_BANKS.map((bank) => (
                 <a
                   key={bank.name}
-                  href={bank.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href={BANK_DEEP_LINKS[bank.name] ?? bank.url}
                   onClick={() => onTrack(bank.name)}
-                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97] transition-transform"
+                  className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97]"
                 >
                   <span className="h-11 w-11 rounded-xl bg-white flex items-center justify-center shrink-0 p-1.5">
                     <BankLogo bank={bank.name} className="h-full w-full object-contain" />
@@ -1908,7 +2066,7 @@ function InteracPayButton({
               <a
                 href={mailtoLink}
                 onClick={() => onTrack('email')}
-                className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97] transition-transform"
+                className="flex flex-col items-center gap-2 p-4 rounded-2xl border border-neutral-200 hover:border-neutral-300 hover:bg-neutral-50 transition-colors active:scale-[0.97]"
               >
                 <span className="h-11 w-11 rounded-xl flex items-center justify-center bg-neutral-700 text-white shrink-0">
                   <Mail className="h-5 w-5" />
