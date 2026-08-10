@@ -112,6 +112,7 @@ export default function TripPage() {
       try {
         await navigator.share({ title: trip?.name ?? 'Tabmate tab', text: `Settle up on Tabmate: ${trip?.name ?? ''}`, url })
         track('share_native_invoked', { trip_id: trip?.id, trip_slug: slug })
+        track('summary_copied', { trip_id: trip?.id, trip_slug: slug, location: 'header' })
         return
       } catch {
         // user cancelled — fall through to sheet
@@ -260,7 +261,15 @@ export default function TripPage() {
             )}
           </button>
           <button
-            onClick={() => setActiveTab('payments')}
+            onClick={() => {
+              setActiveTab('payments')
+              track('settle_up_viewed', {
+                trip_id: trip?.id,
+                trip_slug: slug,
+                debt_count: settlements.length,
+                total_trip_amount: totalSpent,
+              })
+            }}
             className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
               activeTab === 'payments'
                 ? 'bg-white text-neutral-900 shadow-sm'
@@ -436,11 +445,11 @@ export default function TripPage() {
                                   mailtoLink={link}
                                   recipientEmail={toP?.payment_handle ?? ''}
                                   amount={s.amount}
-                                  onTrack={(bank) => track('payment_link_clicked', {
+                                  onTrack={(bank) => track('payment_action_clicked', {
                                     trip_id: trip?.id,
                                     trip_slug: slug,
-                                    provider: 'interac',
-                                    bank,
+                                    type: bank === 'email' ? 'interac_copy_email' : 'bank_launcher',
+                                    bank_name: bank,
                                     amount: s.amount,
                                   })}
                                 />
@@ -452,10 +461,10 @@ export default function TripPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="btn-primary text-xs group/btn"
-                                onClick={() => track('payment_link_clicked', {
+                                onClick={() => track('payment_action_clicked', {
                                   trip_id: trip?.id,
                                   trip_slug: slug,
-                                  provider: toP?.payment_provider,
+                                  type: (toP?.payment_provider ?? 'external_link') as string,
                                   amount: s.amount,
                                 })}
                               >
@@ -1400,8 +1409,10 @@ function AddExpenseModal({
       }
       setEntryMethod('audio')
       track('expense_transcribed', { trip_id: tripId, category: data.category, recording_duration_seconds: recordingDurationSeconds })
+      track('ai_parser_triggered', { type: 'voice', status: 'success' })
     } catch (err) {
       setAudioError(err instanceof Error ? err.message : 'Could not transcribe audio')
+      track('ai_parser_triggered', { type: 'voice', status: 'error' })
     } finally {
       setTranscribing(false)
     }
@@ -1439,8 +1450,10 @@ function AddExpenseModal({
       setSaveReceipt(true)
       setEntryMethod('visual')
       track('receipt_scanned', { trip_id: tripId, category: data.category })
+      track('ai_parser_triggered', { type: 'receipt', status: 'success' })
     } catch (err) {
       setScanError(err instanceof Error ? err.message : 'Could not read receipt')
+      track('ai_parser_triggered', { type: 'receipt', status: 'error' })
     } finally {
       setScanning(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -1516,6 +1529,8 @@ function AddExpenseModal({
       category,
       split_count: splitIds.length,
       entry_method: entryMethod ?? 'manual',
+      method: entryMethod ?? 'manual',
+      has_category: Boolean(category && category !== 'General'),
     })
     setEntryMethod(null)
     onAdded()
@@ -1921,6 +1936,7 @@ function CopyChatSummaryButton({
           await navigator.clipboard.writeText(summaryText)
           setCopied(true)
           setTimeout(() => setCopied(false), 2500)
+          track('summary_copied', { trip_id: null, trip_name: tripName, location: 'settle_up' })
           track('chat_summary_copied', { trip_name: tripName })
         } catch { /* clipboard not available */ }
       }}
@@ -1955,7 +1971,7 @@ const BANK_DEEP_LINKS: Record<string, string> = {
   Wealthsimple: 'wealthsimple://',
 }
 
-function CopyButton({ text, label, icon }: { text: string; label: string; icon: React.ReactNode }) {
+function CopyButton({ text, label, icon, trackType }: { text: string; label: string; icon: React.ReactNode; trackType?: string }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -1965,6 +1981,7 @@ function CopyButton({ text, label, icon }: { text: string; label: string; icon: 
           await navigator.clipboard.writeText(text)
           setCopied(true)
           setTimeout(() => setCopied(false), 2000)
+          if (trackType) track('payment_action_clicked', { type: trackType })
         } catch { /* clipboard not available */ }
       }}
       className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all active:scale-[0.97] ${
@@ -2037,11 +2054,13 @@ function InteracPayButton({
                   text={recipientEmail}
                   label="Copy Email"
                   icon={<Mail className="h-3.5 w-3.5" />}
+                  trackType="interac_copy_email"
                 />
                 <CopyButton
                   text={amountStr}
                   label={`Copy $${amountStr}`}
                   icon={<Wallet className="h-3.5 w-3.5" />}
+                  trackType="interac_copy_amount"
                 />
               </div>
             )}
