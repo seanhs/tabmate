@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Receipt, Share2, Zap, ArrowRight, Check, Loader2, Clock, X, Users, Camera, Mic } from 'lucide-react'
+import { Receipt, Zap, ArrowRight, Loader2, Clock, X, Users, Camera, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import Footer from '../components/Footer'
 import { generateSlug, parseNames } from '../lib/utils'
@@ -188,19 +188,25 @@ export default function HomePage() {
             fewest payments to settle up. Share one link — that's it.
           </p>
 
-          <div className="mt-8 grid sm:grid-cols-3 gap-3 text-left">
+          <button
+            onClick={() => document.getElementById('new-tab')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+            className="mt-8 inline-flex items-center justify-center gap-2 rounded-xl bg-primary-600 px-8 py-4 text-base font-bold text-white shadow-lg shadow-primary-600/25 transition-all hover:bg-primary-700 hover:shadow-xl hover:shadow-primary-600/30 active:scale-[0.98]"
+          >
+            Create a Free Trip Link
+            <ArrowRight className="h-5 w-5" />
+          </button>
+          <p className="mt-3 text-sm text-neutral-500 font-medium">
+            ⚡ Takes 5 seconds · No email required · Free forever
+          </p>
+
+          <div className="mt-10 grid sm:grid-cols-3 gap-3 text-left">
             {[
-              { icon: Camera, text: 'Snap a receipt — we read it for you' },
-              { icon: Mic, text: 'Say it out loud — we transcribe it' },
-              { icon: Zap, text: 'Smart algorithm finds the fewest payments' },
-              { icon: Share2, text: 'Share one link — everyone joins instantly' },
-              { icon: Check, text: 'No accounts, no friction, no awkward math' },
-              { icon: Receipt, text: 'Track every expense, split any way' },
+              { emoji: '🔗', text: 'Share one link — everyone joins instantly' },
+              { emoji: '🎤', text: 'Voice & Receipt AI — log expenses in seconds' },
+              { emoji: '🧮', text: 'Smart Algorithm — finds fewest payments' },
             ].map((f, i) => (
-              <div key={i} className="flex items-center gap-3 text-neutral-700">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600">
-                  <f.icon className="h-4 w-4" />
-                </div>
+              <div key={i} className="flex items-center gap-3 text-neutral-700 rounded-xl border border-neutral-200 bg-white px-4 py-3 shadow-sm">
+                <span className="text-xl shrink-0">{f.emoji}</span>
                 <span className="text-sm font-medium">{f.text}</span>
               </div>
             ))}
