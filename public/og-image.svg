@@ -1,0 +1,17 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#0F172A"/>
+  <text x="600" y="260" font-family="Inter, system-ui, sans-serif" font-size="72" font-weight="700" fill="#FFFFFF" text-anchor="middle">Tabmate</text>
+  <text x="600" y="320" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="400" fill="#94A3B8" text-anchor="middle">Zero-Login Group Expense Splitter</text>
+  <g transform="translate(300, 400)">
+    <rect x="0" y="0" width="180" height="50" rx="25" fill="#1E293B"/>
+    <text x="90" y="32" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="500" fill="#CBD5E1" text-anchor="middle">🔗 Share one link</text>
+  </g>
+  <g transform="translate(510, 400)">
+    <rect x="0" y="0" width="180" height="50" rx="25" fill="#1E293B"/>
+    <text x="90" y="32" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="500" fill="#CBD5E1" text-anchor="middle">🎤 Voice AI</text>
+  </g>
+  <g transform="translate(720, 400)">
+    <rect x="0" y="0" width="180" height="50" rx="25" fill="#1E293B"/>
+    <text x="90" y="32" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="500" fill="#CBD5E1" text-anchor="middle">🧮 Smart Splits</text>
+  </g>
+</svg>
