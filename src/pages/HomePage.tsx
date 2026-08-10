@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Receipt, Share2, Zap, ArrowRight, Check, Loader2, Clock, X, Users, Camera, Mic } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -14,6 +14,93 @@ export default function HomePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [localTrips, setLocalTrips] = useState<LocalTrip[]>([])
+  const [recording, setRecording] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const [audioError, setAudioError] = useState<string | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const recordStartRef = useRef<number>(0)
+  const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [recordingDuration, setRecordingDuration] = useState(0)
+  const MAX_RECORDING_SECONDS = 30
+
+  async function startRecording() {
+    setAudioError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream)
+      mediaRecorderRef.current = mr
+      audioChunksRef.current = []
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data)
+      }
+      mr.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop())
+        const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+        transcribeTab(blob)
+      }
+      mr.start()
+      recordStartRef.current = Date.now()
+      setRecordingDuration(0)
+      recordTimerRef.current = setInterval(() => {
+        const elapsed = (Date.now() - recordStartRef.current) / 1000
+        setRecordingDuration(elapsed)
+        if (elapsed >= MAX_RECORDING_SECONDS) stopRecording()
+      }, 100)
+      setRecording(true)
+    } catch {
+      setAudioError('Microphone access denied')
+    }
+  }
+
+  function stopRecording() {
+    if (recordTimerRef.current) {
+      clearInterval(recordTimerRef.current)
+      recordTimerRef.current = null
+    }
+    mediaRecorderRef.current?.stop()
+    setRecording(false)
+  }
+
+  async function transcribeTab(blob: Blob) {
+    setTranscribing(true)
+    setAudioError(null)
+    try {
+      const reader = new FileReader()
+      const dataUrl: string = await new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      const base64 = dataUrl.split(',')[1]
+      const mimeType = blob.type || 'audio/webm'
+
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-tab`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ audioBase64: base64, mimeType }),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null)
+        throw new Error(errData?.error ?? `Transcription failed (${res.status})`)
+      }
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+
+      if (data.tripName) setTripName(data.tripName)
+      if (Array.isArray(data.names) && data.names.length > 0) {
+        setNamesInput(data.names.join(', '))
+      }
+      track('tab_transcribed', {})
+    } catch (err) {
+      setAudioError(err instanceof Error ? err.message : 'Could not transcribe audio')
+    } finally {
+      setTranscribing(false)
+    }
+  }
 
   useEffect(() => {
     setLocalTrips(getLocalTrips())
@@ -209,6 +296,52 @@ export default function HomePage() {
             </p>
 
             <form onSubmit={handleCreate} className="space-y-5">
+              {/* Voice input */}
+              <div>
+                <button
+                  type="button"
+                  onClick={recording ? stopRecording : startRecording}
+                  disabled={transcribing}
+                  className={`w-full rounded-xl border-2 transition-colors px-4 py-3.5 flex items-center justify-center gap-2 disabled:opacity-60 ${
+                    recording
+                      ? 'border-red-300 bg-red-50 text-red-700'
+                      : 'border-accent-200 bg-accent-50/50 hover:bg-accent-50 text-accent-700'
+                  }`}
+                >
+                  {transcribing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-sm font-medium">Listening...</span>
+                    </>
+                  ) : recording ? (
+                    <>
+                      <div className="flex items-end gap-1 h-5">
+                        <span className="wave-bar w-1 h-2.5 bg-red-500 rounded-full" style={{ animationDelay: '0ms' }} />
+                        <span className="wave-bar w-1 h-4 bg-red-500 rounded-full" style={{ animationDelay: '120ms' }} />
+                        <span className="wave-bar w-1 h-5 bg-red-500 rounded-full" style={{ animationDelay: '240ms' }} />
+                        <span className="wave-bar w-1 h-3 bg-red-500 rounded-full" style={{ animationDelay: '360ms' }} />
+                        <span className="wave-bar w-1 h-4 bg-red-500 rounded-full" style={{ animationDelay: '480ms' }} />
+                      </div>
+                      <span className="text-sm font-medium">Stop</span>
+                      <span className="text-xs text-red-500 tabular-nums">
+                        {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:{String(Math.floor(recordingDuration) % 60).padStart(2, '0')}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-4 w-4" />
+                      <span className="text-sm font-medium">Say it instead</span>
+                    </>
+                  )}
+                </button>
+                <p className="mt-1.5 text-xs text-neutral-400 text-center">
+                  e.g. "Vegas trip with Dave, Priya, and that guy who still owes me $40"
+                </p>
+                {audioError && (
+                  <p className="mt-1 text-xs text-red-600 text-center">{audioError}</p>
+                )}
+              </div>
+
               <div>
                 <label className="label" htmlFor="tripName">Tab name</label>
                 <input
