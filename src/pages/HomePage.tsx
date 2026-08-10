@@ -150,6 +150,7 @@ export default function HomePage() {
         trip_id: trip.id,
         trip_slug: slug,
         participant_count: names.length,
+        source: 'landing_hero',
       })
       addLocalTrip(trip)
       navigate(`/t/${slug}`)
